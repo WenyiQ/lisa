@@ -65,6 +65,6 @@ html_theme_options = {
     "display_version": False,
 }
 
-html_favicon = "favicon.ico"
+html_favicon = "_static/favicon.ico"
 
-html_logo = "LSG_Logo.png"
+html_logo = "_static/LSG_Logo.png"
