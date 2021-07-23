@@ -6,10 +6,10 @@ import json
 import logging
 import os
 import re
+from copy import deepcopy
 from dataclasses import dataclass, field
 from datetime import datetime
 from functools import lru_cache
-from logging import getLogger
 from pathlib import Path
 from types import SimpleNamespace
 from typing import Any, Dict, List, Optional, Tuple, Type, Union
@@ -671,7 +671,7 @@ class AzurePlatform(Platform):
         self.subscription_id = azure_runbook.subscription_id
 
         # suppress warning message by search for different credential types
-        azure_identity_logger = getLogger("azure.identity")
+        azure_identity_logger = logging.getLogger("azure.identity")
         azure_identity_logger.setLevel(logging.ERROR)
         subscription = self._sub_client.subscriptions.get(self.subscription_id)
         azure_identity_logger.setLevel(logging.WARN)
@@ -839,6 +839,9 @@ class AzurePlatform(Platform):
             azure_node_runbook = node_space.get_extended_runbook(
                 AzureNodeSchema, type_name=AZURE
             )
+            # Subscription Id is used by Shared Gallery images located
+            # in subscription different from where LISA is run
+            azure_node_runbook.subscription_id = self.subscription_id
 
             # init node
             node = environment.nodes.from_requirement(
@@ -859,7 +862,13 @@ class AzurePlatform(Platform):
             if azure_node_runbook.vhd:
                 # vhd is higher priority
                 azure_node_runbook.marketplace = None
-            elif not azure_node_runbook.marketplace:
+                azure_node_runbook.shared_gallery = None
+            elif azure_node_runbook.shared_gallery:
+                azure_node_runbook.marketplace = None
+            elif azure_node_runbook.marketplace:
+                # marketplace value is already set in runbook
+                pass
+            else:
                 # set to default marketplace, if nothing specified
                 azure_node_runbook.marketplace = AzureVmMarketplaceSchema()
 
@@ -909,7 +918,9 @@ class AzurePlatform(Platform):
                 )
                 arm_parameters.enable_sriov = False
 
-        template = self._load_template()
+        # the arm template may be updated by the hooks, so make a copy to avoid
+        # the original template is modified.
+        template = deepcopy(self._load_template())
         plugin_manager.hook.azure_update_arm_template(
             template=template, environment=environment
         )
